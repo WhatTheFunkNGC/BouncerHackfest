@@ -155,7 +155,6 @@ function monitorLeg(leg){
 			console.log("recive dtmf");
 			announcedtmf = true;
 
-			runBounceCallCheck = true;
 			runBouncerCall();
 
 			}		
@@ -170,11 +169,6 @@ function monitorLeg(leg){
 			}
 		});
 	}).end();
-
-	if(runBounceCallCheck){
-		runBouncerCall();
-		runBounceCallCheck = false;
-	}
 };
 
 function runBouncerCall(){
