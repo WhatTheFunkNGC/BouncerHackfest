@@ -13,7 +13,7 @@ var bridgeId;
 
 var bridgeIdOut;
 
-var addressTel = 'tel:+13334441037'
+var addressTel = 'sip:+13334441039@sandbox.demo.alcatel-lucent.com'
 var serverPort = '5678'
 
 var address0 = 'sip:+16307771000@sandbox.demo.alcatel-lucent.com';
@@ -31,8 +31,7 @@ var willNotifyURL = 'http://192.168.4.163:8080';
 
 var opts = {
 	hostname: 'cowlinen.ddns.net',
-	port:80,
-	rootPath:'http://cowlinen.ddns.net' +"/"
+	port:80
 };
 
 var addresses = {0:[address0],1:[address1],2:[address2],3:[address3],4:[address4],5:[address5]};
@@ -56,7 +55,7 @@ program
 	.parse(process.argv);
 
 function login(u, p, cb){
-	opts.path=opts.rootPath + "login";
+	opts.path="/login";
 	opts.method="POST";
 	opts.headers = {
 		"X-BT-FV-API-KEY": appId,
@@ -291,12 +290,14 @@ Object.keys(ifaces).forEach(function (ifname) {
 
 
 	var obj = JSON.stringify({notifyUrl:'http://'+ip+':'+serverPort+'/events'});
-	opts.path = opts.rootPath + userId + "/devices/" + addressTel;
+	opts.path = "/"+userId + "/devices/" + addressTel;
+	
 	opts.method = "PUT";
 	opts.headers = {
 		"X-BT-FV-SESSION": session,
 		'Content-Type':'application/json'
 	};
+	console.log(opts);
 	http.request(opts, function(res){
 		console.log("\t STATUS", res.statusCode, res.headers);
 				var b = [];
