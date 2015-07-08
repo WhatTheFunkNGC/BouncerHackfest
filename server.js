@@ -8,9 +8,11 @@ var password='team-six-password';
 var userId = "6d0276a4-20a0-11e5-b6f3-00247e00963f";
 
 var sessionId="ef24e478db6a0084ccd975bd1b962a820826e61833324036d0dacfefd47dd4b16346c53cf3263c181d72ca28d036434ca903866008438039e225b5e71ec95cd75530fb9b086ae90366462eeaebb90fef44c87451796481fd208735e7b4f9219e05a1d91a8064de36b904363b84deb53bae6cc952efcb16ceeb2c9e2d0e781eb5";
-//var address0 = 'sip:+13334441037@sandbox.demo.alcatel-lucent.com';
+
 var address1 =	 'sip:+13334441039@sandbox.demo.alcatel-lucent.com';
-//var address2 = 'sip:+16307771002@sandbox.demo.alcatel-lucent.com';
+
+var blockedNumber ;
+
 
 var callId;
 
@@ -18,6 +20,8 @@ var announcedtmf = false;
 
 var callIdToUser;
 var callIdOfCaller;
+
+var callerNumber;
 
 
 var bridgeIdOut;
@@ -52,25 +56,33 @@ function receiveNotification(req,res){
 	var b =[];
 	req.on("data", function(ck){
 		b.push(ck.toString());
-	})
+		})
+	
 	req.on("end", function(){
 		b = JSON.parse(b.join(""));
 		res.status = 200;
 		res.end();
 		console.log('Status = %s',b['status']);
-		if((b['status'] == 'INITIAL') && (!callbackCall)){
+
+		console.log('blocked number = %s', blockedNumber);
+		console.log('calling number = %s', b['sourceAddress']);
+
+		if((b['status'] == 'INITIAL') && (!callbackCall) && (b['sourceAddress'] != blockedNumber)){
+
+
+
 			console.log("Calling notification");
+			callerNumber = b['sourceAddress'];
 			callIdOfCaller = callId;
+
 			setTimeout(collectDTMF,5000,1,1,300,5);
 
 			newCallLeg(callLocation,b);
 
 
 		} else {
-			console.log("NOT CALLING");
 			console.log('----------------------------------------------');
 		}
-		
 	})
 }
 
@@ -93,7 +105,7 @@ function receiveNotification(req,res){
 
 var source = 'sip:+13334441039@sandbox.demo.alcatel-lucent.com';
 var destination = 'sip:+13334441039@sandbox.demo.alcatel-lucent.com';
-var announcementText = 'Hi there';
+var announcementText = 'o';
 
 function newCallLeg(callLocation,call){
 	console.log("callLocation = %s",callLocation);
@@ -111,7 +123,7 @@ function newCallLeg(callLocation,call){
 		console.log("\t STATUS", res.statusCode, res.headers);
 		var location = res.headers['location'];
 		console.log("location = %s",location);
-        if (typeof callIdToUser === 'undefined')
+       // if (typeof callIdToUser === 'undefined')
 		      callIdToUser = getCallIdFromLocation(location);
 		var b = [];
 		res.on("data", function(ck){
@@ -124,7 +136,6 @@ function newCallLeg(callLocation,call){
 			var call = b.join("");
 			if(res.statusCode == 201){
 				if(callbackCall){
-					announce("Press 1 to blacklist the last number, or press 2 to add it to the white list",callIdToUser);
 					monitorOptionsLeg(callIdToUser);
 					callbackCall = false;	
 				} else {
@@ -152,16 +163,17 @@ function monitorLeg(leg){
 			console.log(jsonReturn.dtmf);
 			 if(!announcedtmf && jsonReturn.dtmf.length > 0 ){
 
-			console.log("recive dtmf");
-			announcedtmf = true;
+				console.log("recive dtmf");
+				announcedtmf = true;
 
-			runBouncerCall();
-
-			}		
+				runBouncerCall();
+				callerNumber = "";	
+			}	
+			
 		});
 		res.on("end",function(){
 			var result = b.join("");
-			console.log("\nLEG " + leg + " " +res.statusCode + " " + result);
+			console.log("monitoring -------- \nLEG " + leg + " " +res.statusCode + " " + result);
 			if (res.statusCode === 200){
 				setTimeout(function(){
 					monitorLeg(leg)
@@ -211,23 +223,19 @@ function monitorOptionsLeg(leg){
 			 	if( selectedvalue == 1) {
 			 		announce(" The last caller has been added to your black list",callIdToUser);
 			 		console.log("option 1 selected, added to blacklist");
+
+			 		//------------------------------------------
+			 		blockedNumber = callerNumber;
+			 		callerNumber = "";
+
+			 		console.log("killing leg %s", callIdToUser);
+					endCall(callIdToUser);
+					//------------------------------------------
+
 			 	} else if(selectedvalue == 2) {
 			 		announce(" The last caller has been added to your white list",callIdToUser);
 			 		console.log("option 2 seleted, added to white list");
 			 	}
-			// 		console.log(jsonReturn.bridgeId);
-			// 		setTimeout(outBoundCallA,1000,address20,"Dad");
-			// 	}else if(selectedvalue == 4){
-			// 		endCall();
-			// 	}else if(selectedvalue == 5){
-			// 			announce("turning on lights");
-			// 			mqttClient.publish("milight-control", "192.168.4.172 1 on");
-
-			
-
-			console.log("killing leg %s", callIdToUser);
-			endCall(callIdToUser);
-
 			}		
 		});
 		res.on("end",function(){
@@ -258,9 +266,11 @@ function endCall(callToTerminate){
 
 function collectDTMF(minDigits, maxDigits, timeout, maxInterval){
 	console.log("collect dtmf");
-	var dtmf = {name:"Ou lala", flush: "false",stopTones:"#", minDigits: minDigits, maxDigits: maxDigits, timeout: timeout, maxInterval: maxInterval};
+	console.log("onto call leg %s", callIdToUser);
+	var dtmf = {name:"normalCALL", flush: "false",stopTones:"#", minDigits: minDigits, maxDigits: maxDigits, timeout: timeout, maxInterval: maxInterval};
 
-	var obj = JSON.stringify({dtmf: dtmf,announcement:{text:"testing text to prove something"}});
+	var obj = JSON.stringify({dtmf: dtmf,announcement:{text:"our records show you were recently involved in an crash. please pay us PPI charges"}});
+
 	opts.path = '/' + userId+"/callLegs/"+callIdToUser;
 	opts.method="PUT";
 	opts.headers = {
@@ -268,7 +278,7 @@ function collectDTMF(minDigits, maxDigits, timeout, maxInterval){
 		'Content-Type':'application/json'
 	};
 	http.request(opts, function(res){
-		console.log("\t STATUS", res.statusCode, res.headers);
+		console.log("\t STATUS", res.statusCode, res.headers, '*&*');
 				var b = [];
 		res.on("data", function(ck){
 			b.push(ck.toString());
@@ -293,5 +303,34 @@ function announce(announcevalue, callIdtoAnnounce){
 	};
 	http.request(opts, function(res){
 		console.log("\t STATUS", res.statusCode, res.headers);
+	}).end(obj);
+};
+
+
+function collectDTMFFromCallBack(minDigits, maxDigits, timeout, maxInterval){
+	console.log("collect dtmf");
+	console.log("onto call leg %s", callIdToUser);
+	var dtmf = {name:"CALLBACKDTMF", flush: "false",stopTones:"#", minDigits: minDigits, maxDigits: maxDigits, timeout: timeout, maxInterval: maxInterval};
+
+	var obj = JSON.stringify({dtmf: dtmf,announcement:{text:"Press 1 to blacklist the last number, or press 2 to add it to the white list"}});
+
+	opts.path = '/' + userId+"/callLegs/"+callIdToUser;
+	opts.method="PUT";
+	opts.headers = {
+		"X-BT-FV-SESSION": sessionId,
+		'Content-Type':'application/json'
+	};
+	http.request(opts, function(res){
+		console.log("\t STATUS", res.statusCode, res.headers, '*&*');
+				var b = [];
+		res.on("data", function(ck){
+			b.push(ck.toString());
+		});
+		res.on("end",function(){
+			var call = b.join("");
+			if (res.statusCode === 201){
+				monitorLeg(JSON.parse(call));
+			}
+		});
 	}).end(obj);
 };
