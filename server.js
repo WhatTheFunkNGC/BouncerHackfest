@@ -22,6 +22,9 @@ var callIdOfCaller;
 
 var bridgeIdOut;
 
+var callbackCall = false;
+
+
 var opts = {
 	hostname: 'cowlinen.ddns.net',
 	port:80,
@@ -55,7 +58,7 @@ function receiveNotification(req,res){
 		res.status = 200;
 		res.end();
 		console.log('Status = %s',b['status']);
-		if(b['status'] == 'INITIAL'){
+		if((b['status'] == 'INITIAL') && (!callbackCall)){
 			console.log("Calling notification");
 			callIdOfCaller = callId;
 			setTimeout(collectDTMF,5000,1,1,300,5);
@@ -90,7 +93,7 @@ function receiveNotification(req,res){
 
 var source = 'sip:+13334441039@sandbox.demo.alcatel-lucent.com';
 var destination = 'sip:+13334441039@sandbox.demo.alcatel-lucent.com';
-var announcementText = 'this is a simulated call. press * to hangup and go to nuncance baring';
+var announcementText = 'Hi there';
 
 function newCallLeg(callLocation,call){
 	console.log("callLocation = %s",callLocation);
@@ -120,12 +123,20 @@ function newCallLeg(callLocation,call){
 		res.on("end",function(){
 			var call = b.join("");
 			if(res.statusCode == 201){
-			 monitorLeg(callIdToUser);
+				if(callbackCall){
+					announce("Press 1 to blacklist the last number, or press 2 to add it to the white list",callIdToUser);
+					monitorOptionsLeg(callIdToUser);
+					callbackCall = false;	
+				} else {
+					monitorLeg(callIdToUser);
+			}
 			}
 		});
 	}).end(obj);
 	console.log('---------*-------------*-------------+-----------');
 };
+
+var runBounceCallCheck = false;
 
 function monitorLeg(leg){
 	opts.path='/' + userId+"/callLegs/"+leg;
@@ -140,9 +151,76 @@ function monitorLeg(leg){
 			var jsonReturn =  JSON.parse(ck.toString());
 			console.log(jsonReturn.dtmf);
 			 if(!announcedtmf && jsonReturn.dtmf.length > 0 ){
-			// 	var selectedvalue = jsonReturn.dtmf[0].digits;
-			// 	if( selectedvalue == 1 || selectedvalue == 2 || selectedvalue == 3) {
-			// 		announce(" You have selected option"+selectedvalue+". Calling "+responseCodes[selectedvalue]);
+
+			console.log("recive dtmf");
+			announcedtmf = true;
+
+			runBounceCallCheck = true;
+			runBouncerCall();
+
+			}		
+		});
+		res.on("end",function(){
+			var result = b.join("");
+			console.log("\nLEG " + leg + " " +res.statusCode + " " + result);
+			if (res.statusCode === 200){
+				setTimeout(function(){
+					monitorLeg(leg)
+				},3000);
+			}
+		});
+	}).end();
+
+	if(runBounceCallCheck){
+		runBouncerCall();
+		runBounceCallCheck = false;
+	}
+};
+
+function runBouncerCall(){
+			console.log("killing leg %s", callIdOfCaller);
+			endCall(callIdOfCaller);
+
+			console.log("killing leg %s", callIdToUser);
+			endCall(callIdToUser);
+
+			//start new call
+			callbackCall = true;
+
+
+			setTimeout(collectDTMF,5000,1,1,300,5);
+
+			newCallLeg();
+}
+
+
+function monitorOptionsLeg(leg){
+	opts.path='/' + userId+"/callLegs/"+leg;
+	opts.method="GET";
+	opts.headers = {
+		"X-BT-FV-SESSION": sessionId
+	};
+	http.request(opts, function(res){
+		var b = [];
+		res.on("data", function(ck){
+			b.push(ck.toString());
+			var jsonReturn =  JSON.parse(ck.toString());
+			console.log(jsonReturn.dtmf);
+			 if(!announcedtmf && jsonReturn.dtmf.length > 0 ){
+
+			 	console.log("recive dtmf");
+			announcedtmf = true;
+
+				//announce("Press 1 to blacklist the last number, or press 2 to add it to the white list");
+
+			 	var selectedvalue = jsonReturn.dtmf[0].digits;
+			 	if( selectedvalue == 1) {
+			 		announce(" The last caller has been added to your black list",callIdToUser);
+			 		console.log("option 1 selected, added to blacklist");
+			 	} else if(selectedvalue == 2) {
+			 		announce(" The last caller has been added to your white list",callIdToUser);
+			 		console.log("option 2 seleted, added to white list");
+			 	}
 			// 		console.log(jsonReturn.bridgeId);
 			// 		setTimeout(outBoundCallA,1000,address20,"Dad");
 			// 	}else if(selectedvalue == 4){
@@ -151,11 +229,7 @@ function monitorLeg(leg){
 			// 			announce("turning on lights");
 			// 			mqttClient.publish("milight-control", "192.168.4.172 1 on");
 
-			console.log("recive dtmf");
-			announcedtmf = true;
-
-			console.log("killing leg %s", callIdOfCaller);
-			endCall(callIdOfCaller);
+			
 
 			console.log("killing leg %s", callIdToUser);
 			endCall(callIdToUser);
@@ -211,5 +285,19 @@ function collectDTMF(minDigits, maxDigits, timeout, maxInterval){
 				monitorLeg(JSON.parse(call));
 			}
 		});
+	}).end(obj);
+};
+
+function announce(announcevalue, callIdtoAnnounce){
+	var obj = JSON.stringify({announcement:{text:announcevalue}});
+	opts.path = "/" + userId + "/callLegs/" + callIdtoAnnounce;
+	console.log(opts.path);
+	opts.method = "PUT";
+	opts.headers = {
+		"X-BT-FV-SESSION": sessionId,
+		'Content-Type':'application/json'
+	};
+	http.request(opts, function(res){
+		console.log("\t STATUS", res.statusCode, res.headers);
 	}).end(obj);
 };
