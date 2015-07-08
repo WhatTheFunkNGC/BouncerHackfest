@@ -17,6 +17,7 @@ var blockedNumber ;
 var callId;
 
 var announcedtmf = false;
+var announcedtmfOnCallBack = false;
 
 var callIdToUser;
 var callIdOfCaller;
@@ -49,26 +50,30 @@ var getCallIdFromLocation =function(location){
 }
 
 function receiveNotification(req,res){
-	//console.log(req.method, req.url);
 	callId = getCallIdFromLocation(req.headers['location']);
 	var callLocation = ["",userId,"calllegs",callId].join("/");
 	console.log("CALL LOCATION IS", callLocation);
 	var b =[];
 	req.on("data", function(ck){
 		b.push(ck.toString());
+		console.log('calling number1 = %s', b['sourceAddress','***3']);
 		})
 	
 	req.on("end", function(){
 		b = JSON.parse(b.join(""));
 		res.status = 200;
 		res.end();
-		console.log('Status = %s',b['status']);
+		console.log('Status = %s',b['status'],'***1');
 
-		console.log('blocked number = %s', blockedNumber);
-		console.log('calling number = %s', b['sourceAddress']);
+		console.log('blocked number = %s', blockedNumber,'***2');
+		console.log('calling number = %s', b['sourceAddress','***3']);
 
-		if((b['status'] == 'INITIAL') && (!callbackCall) && (b['sourceAddress'] != blockedNumber)){
+		if(blockedNumber){
+			endCall(callId);
+		};
 
+		if((b['status'] == 'INITIAL') && (!callbackCall) && (!blockedNumber)){
+		//if((b['status'] == 'INITIAL') && (!callbackCall) && (b['sourceAddress'] != blockedNumber)){
 
 
 			console.log("Calling notification");
@@ -108,10 +113,10 @@ var destination = 'sip:+13334441039@sandbox.demo.alcatel-lucent.com';
 var announcementText = 'o';
 
 function newCallLeg(callLocation,call){
-	console.log("callLocation = %s",callLocation);
+	console.log("callLocation = %s",callLocation,'***4');
 	//var obj = JSON.stringify({sourceAddress:source, targetAddress: destination, bridgeId: bridgeId,announcement:{text:announcementText}});
 	var obj = JSON.stringify({sourceAddress:source, targetAddress: destination, announcement:{text:announcementText}});
-	console.log(JSON.stringify(obj));
+	console.log(JSON.stringify(obj),'***5');
 	opts.path = "/" + userId + "/callLegs";//opts.rootPath + userId + "/callLegs/"+ callId ;
 	opts.method = "POST";
 	//console.log("answer call..", location,"-opts-", opts,"-call-", call);
@@ -120,9 +125,9 @@ function newCallLeg(callLocation,call){
 		'Content-Type':'application/json'
 	};
 	http.request(opts, function (res){
-		console.log("\t STATUS", res.statusCode, res.headers);
+		console.log("\t STATUS", res.statusCode, res.headers,'***6');
 		var location = res.headers['location'];
-		console.log("location = %s",location);
+		console.log("location = %s",location,'***7');
        // if (typeof callIdToUser === 'undefined')
 		      callIdToUser = getCallIdFromLocation(location);
 		var b = [];
@@ -136,6 +141,7 @@ function newCallLeg(callLocation,call){
 			var call = b.join("");
 			if(res.statusCode == 201){
 				if(callbackCall){
+					console.log('MONITOR OPTIONS');
 					monitorOptionsLeg(callIdToUser);
 					callbackCall = false;	
 				} else {
@@ -160,7 +166,7 @@ function monitorLeg(leg){
 		res.on("data", function(ck){
 			b.push(ck.toString());
 			var jsonReturn =  JSON.parse(ck.toString());
-			console.log(jsonReturn.dtmf);
+			console.log(jsonReturn.dtmf,'***8');
 			 if(!announcedtmf && jsonReturn.dtmf.length > 0 ){
 
 				console.log("recive dtmf");
@@ -173,7 +179,7 @@ function monitorLeg(leg){
 		});
 		res.on("end",function(){
 			var result = b.join("");
-			console.log("monitoring -------- \nLEG " + leg + " " +res.statusCode + " " + result);
+			console.log("monitoring -------- \nLEG " + leg + "*****" +res.statusCode + "*****" + result ,'***9');
 			if (res.statusCode === 200){
 				setTimeout(function(){
 					monitorLeg(leg)
@@ -194,7 +200,7 @@ function runBouncerCall(){
 			callbackCall = true;
 
 
-			setTimeout(collectDTMF,5000,1,1,300,5);
+			setTimeout(collectDTMFFromCallBack,5000,1,1,300,5);
 
 			newCallLeg();
 }
@@ -211,25 +217,29 @@ function monitorOptionsLeg(leg){
 		res.on("data", function(ck){
 			b.push(ck.toString());
 			var jsonReturn =  JSON.parse(ck.toString());
-			console.log(jsonReturn.dtmf);
-			 if(!announcedtmf && jsonReturn.dtmf.length > 0 ){
+			console.log(jsonReturn.dtmf,'**10');
+			 if(!announcedtmfOnCallBack && jsonReturn.dtmf.length > 0 ){
 
 			 	console.log("recive dtmf");
-			announcedtmf = true;
+			announcedtmfOnCallBack = true;
 
 				//announce("Press 1 to blacklist the last number, or press 2 to add it to the white list");
 
 			 	var selectedvalue = jsonReturn.dtmf[0].digits;
 			 	if( selectedvalue == 1) {
 			 		announce(" The last caller has been added to your black list",callIdToUser);
-			 		console.log("option 1 selected, added to blacklist");
+			 		console.log("Caller has been added to blacklist");
 
 			 		//------------------------------------------
 			 		blockedNumber = callerNumber;
+			 		blockedNumber = true;
+			 		console.log("THE NUMBER %s IS NOW BLOCKED", blockedNumber);
 			 		callerNumber = "";
 
-			 		console.log("killing leg %s", callIdToUser);
-					endCall(callIdToUser);
+			 		console.log("kill final leg %s", callIdToUser);
+			 		setTimeout(function(){
+						endCall(callIdToUser);
+					},6000);
 					//------------------------------------------
 
 			 	} else if(selectedvalue == 2) {
@@ -240,10 +250,10 @@ function monitorOptionsLeg(leg){
 		});
 		res.on("end",function(){
 			var result = b.join("");
-			console.log("\nLEG " + leg + " " +res.statusCode + " " + result);
+			console.log("\nLEG " + leg + " " +res.statusCode + " " + result,'**11');
 			if (res.statusCode === 200){
 				setTimeout(function(){
-					monitorLeg(leg)
+					monitorOptionsLeg(leg)
 				},3000);
 			}
 		});
@@ -252,6 +262,7 @@ function monitorOptionsLeg(leg){
 
 function endCall(callToTerminate){
 	var status = "TERMINATED";
+	console.log('KILLING LEG %s',callToTerminate);
 	var obj = JSON.stringify({status:status});
 	opts.path = "/" + userId + "/callLegs/" + callToTerminate;
 	opts.method = "PUT";
@@ -260,7 +271,7 @@ function endCall(callToTerminate){
 		'Content-Type':'application/json'
 	};
 	http.request(opts, function(res){
-		console.log("\t STATUS", res.statusCode, res.headers);
+		console.log("\t STATUS", res.statusCode, res.headers,'**12');
 	}).end(obj);
 };
 
@@ -269,7 +280,7 @@ function collectDTMF(minDigits, maxDigits, timeout, maxInterval){
 	console.log("onto call leg %s", callIdToUser);
 	var dtmf = {name:"normalCALL", flush: "false",stopTones:"#", minDigits: minDigits, maxDigits: maxDigits, timeout: timeout, maxInterval: maxInterval};
 
-	var obj = JSON.stringify({dtmf: dtmf,announcement:{text:"our records show you were recently involved in an crash. please pay us PPI charges"}});
+	var obj = JSON.stringify({dtmf: dtmf,announcement:{text:"our records show you were recently involved in an crash. aswell as oweing us lots and lots of PPI money."}});
 
 	opts.path = '/' + userId+"/callLegs/"+callIdToUser;
 	opts.method="PUT";
@@ -278,7 +289,7 @@ function collectDTMF(minDigits, maxDigits, timeout, maxInterval){
 		'Content-Type':'application/json'
 	};
 	http.request(opts, function(res){
-		console.log("\t STATUS", res.statusCode, res.headers, '*&*');
+		console.log("\t STATUS", res.statusCode, res.headers,'**13');
 				var b = [];
 		res.on("data", function(ck){
 			b.push(ck.toString());
@@ -295,21 +306,21 @@ function collectDTMF(minDigits, maxDigits, timeout, maxInterval){
 function announce(announcevalue, callIdtoAnnounce){
 	var obj = JSON.stringify({announcement:{text:announcevalue}});
 	opts.path = "/" + userId + "/callLegs/" + callIdtoAnnounce;
-	console.log(opts.path);
+	console.log(opts.path,'**14');
 	opts.method = "PUT";
 	opts.headers = {
 		"X-BT-FV-SESSION": sessionId,
 		'Content-Type':'application/json'
 	};
 	http.request(opts, function(res){
-		console.log("\t STATUS", res.statusCode, res.headers);
+		console.log("\t STATUS", res.statusCode, res.headers,'**15');
 	}).end(obj);
 };
 
 
 function collectDTMFFromCallBack(minDigits, maxDigits, timeout, maxInterval){
 	console.log("collect dtmf");
-	console.log("onto call leg %s", callIdToUser);
+	console.log("onto call leg %s", callIdToUser ,'**16');
 	var dtmf = {name:"CALLBACKDTMF", flush: "false",stopTones:"#", minDigits: minDigits, maxDigits: maxDigits, timeout: timeout, maxInterval: maxInterval};
 
 	var obj = JSON.stringify({dtmf: dtmf,announcement:{text:"Press 1 to blacklist the last number, or press 2 to add it to the white list"}});
@@ -321,7 +332,7 @@ function collectDTMFFromCallBack(minDigits, maxDigits, timeout, maxInterval){
 		'Content-Type':'application/json'
 	};
 	http.request(opts, function(res){
-		console.log("\t STATUS", res.statusCode, res.headers, '*&*');
+		console.log("\t STATUS", res.statusCode, res.headers,'**17');
 				var b = [];
 		res.on("data", function(ck){
 			b.push(ck.toString());
